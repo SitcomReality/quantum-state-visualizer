@@ -56,10 +56,24 @@ export class DiceParticleRenderer {
     });
     this.diceParticles = [];
 
-    // Calculate dynamic scaling and spacing based on dice count
-    const baseScale = numDice === 1 ? 4.5 : Math.max(1.8, 5 / Math.sqrt(numDice));
+    // Basic desired baseScale before applying viewport cap
+    const desiredBase = numDice === 1 ? 4.5 : Math.max(1.8, 5 / Math.sqrt(numDice));
+    const spacingBase = numDice === 1 ? 0 : desiredBase * 0.8;
+    const startX = -(numDice - 1) * spacingBase / 2;
+
+    // Compute world-space visible size at camera distance to convert pixels -> world units
+    const fovRad = (this.camera.fov * Math.PI) / 180;
+    const worldHeight = 2 * Math.tan(fovRad / 2) * Math.abs(this.camera.position.z);
+    const worldWidth = worldHeight * (this.container.clientWidth / Math.max(1, this.container.clientHeight));
+
+    // Maximum allowed world size for a die (75% of the smaller canvas dimension)
+    const maxWorldDim = 0.75 * Math.min(worldWidth, worldHeight);
+
+    // Convert an approximate desiredBase (which was tuned in world units) to be capped by maxWorldDim.
+    // We choose to clamp the scalar so the die's full extents remain within ~75% of view.
+    const capScale = Math.max(0.1, maxWorldDim * 0.5); // *0.5 to treat baseScale as half-extent proportional
+    const baseScale = Math.min(desiredBase, capScale);
     const spacing = numDice === 1 ? 0 : baseScale * 0.8;
-    const startX = -(numDice - 1) * spacing / 2;
 
     for (let i = 0; i < numDice; i++) {
       const geometry = new THREE.BufferGeometry();
@@ -145,9 +159,28 @@ export class DiceParticleRenderer {
 
   onResize() {
     if (!this.container || !this.renderer) return;
-    this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+    // Update camera and renderer sizes
+    this.camera.aspect = this.container.clientWidth / Math.max(1, this.container.clientHeight);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+
+    // Recompute world-space visible dimensions and cap for die sizes
+    const fovRad = (this.camera.fov * Math.PI) / 180;
+    const worldHeight = 2 * Math.tan(fovRad / 2) * Math.abs(this.camera.position.z);
+    const worldWidth = worldHeight * (this.container.clientWidth / Math.max(1, this.container.clientHeight));
+    const maxWorldDim = 0.75 * Math.min(worldWidth, worldHeight);
+    const capScale = Math.max(0.1, maxWorldDim * 0.5);
+
+    // Apply cap to all existing dice particle groups so they remain within the new viewport
+    this.diceParticles.forEach(p => {
+      const desired = p.userData.baseScale || p.scale.x || 1;
+      const newBase = Math.min(desired, capScale);
+      p.userData.baseScale = newBase;
+      // Preserve any transient animation scale factor by normalizing current scale to base then applying new base
+      const currentScale = p.scale.x || newBase;
+      const animFactor = currentScale / Math.max(1e-6, desired);
+      p.scale.setScalar(newBase * animFactor);
+    });
   }
 
   _startMainLoop() {
