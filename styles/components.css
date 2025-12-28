@@ -94,3 +94,22 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.collect-particles-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 50;
+}
+
+.collect-particle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #facc15;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.9);
+  opacity: 1;
+  will-change: transform, opacity;
+}

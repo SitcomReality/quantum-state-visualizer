@@ -27,17 +27,23 @@ export class DiceParticleRenderer {
     this.numParticles = 1200;
 
     // Per-particle simulation data
-    this.basePositions = null;      // idle cube positions
+    this.basePositions = null;      // current "rest" positions (cube or clumps)
+    this.initialBasePositions = null; // original diffuse cube positions
     this.velocities = null;         // idle velocities
     this.clusterTargets = null;     // target positions during clump animation
     this.clusterCenters = [];       // current set of cluster centers
     this.clusterCount = 1;
 
     // Animation state
-    this.phase = 'idle';            // 'idle' | 'rolling' | 'clumped'
+    this.phase = 'idle';            // 'idle' | 'rolling' | 'clumped' | 'unclumping'
     this.rollStartTime = 0;
     this.rollDuration = 1500;
     this.rollCallback = null;
+
+    this.unclumpStartTime = 0;
+    this.unclumpDuration = 800;
+    this.unclumpCallback = null;
+    this.unclumpStartPositions = null;
 
     // Timekeeping
     this._lastTime = performance.now();
@@ -72,6 +78,7 @@ export class DiceParticleRenderer {
     const positions = new Float32Array(this.numParticles * 3);
     const colors = new Float32Array(this.numParticles * 3);
     this.basePositions = new Float32Array(this.numParticles * 3);
+    this.initialBasePositions = new Float32Array(this.numParticles * 3);
     this.velocities = new Float32Array(this.numParticles * 3);
     this.clusterTargets = new Float32Array(this.numParticles * 3);
 
@@ -91,6 +98,10 @@ export class DiceParticleRenderer {
       this.basePositions[idx] = x;
       this.basePositions[idx + 1] = y;
       this.basePositions[idx + 2] = z;
+
+      this.initialBasePositions[idx] = x;
+      this.initialBasePositions[idx + 1] = y;
+      this.initialBasePositions[idx + 2] = z;
 
       // Random small velocity for swirling
       this.velocities[idx] = (Math.random() - 0.5) * 0.15;
@@ -380,6 +391,72 @@ export class DiceParticleRenderer {
       this._updateRolling(dt);
     } else if (this.phase === 'clumped') {
       this._updateClumped(dt);
+    } else if (this.phase === 'unclumping') {
+      this._updateUnclumping(dt);
+    }
+  }
+
+  _updateUnclumping(dt) {
+    if (!this.points || !this.initialBasePositions || !this.unclumpStartPositions) return;
+    const positions = this.points.geometry.attributes.position.array;
+
+    const now = performance.now();
+    const t = Math.min(1, (now - this.unclumpStartTime) / this.unclumpDuration);
+    const ease = t * t * (3 - 2 * t); // smoothstep
+
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+
+      const sx = this.unclumpStartPositions[idx];
+      const sy = this.unclumpStartPositions[idx + 1];
+      const sz = this.unclumpStartPositions[idx + 2];
+
+      const tx = this.initialBasePositions[idx];
+      const ty = this.initialBasePositions[idx + 1];
+      const tz = this.initialBasePositions[idx + 2];
+
+      const x = sx + (tx - sx) * ease;
+      const y = sy + (ty - sy) * ease;
+      const z = sz + (tz - sz) * ease;
+
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+    }
+
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.rotation.y += 0.2 * dt;
+
+    if (t >= 1) {
+      // Set base positions back to diffuse cube and return to idle swirling
+      for (let i = 0; i < this.numParticles * 3; i++) {
+        this.basePositions[i] = this.initialBasePositions[i];
+      }
+      this.phase = 'idle';
+      this.unclumpStartPositions = null;
+
+      if (this.unclumpCallback) {
+        const cb = this.unclumpCallback;
+        this.unclumpCallback = null;
+        cb();
+      }
+    }
+  }
+
+  animateUnclump(callback) {
+    if (!this.points || !this.initialBasePositions) {
+      if (callback) callback();
+      return;
+    }
+
+    this.phase = 'unclumping';
+    this.unclumpStartTime = performance.now();
+    this.unclumpCallback = callback;
+    this.unclumpStartPositions = new Float32Array(this.numParticles * 3);
+
+    const positions = this.points.geometry.attributes.position.array;
+    for (let i = 0; i < this.numParticles * 3; i++) {
+      this.unclumpStartPositions[i] = positions[i];
     }
   }
 

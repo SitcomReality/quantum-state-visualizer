@@ -10,6 +10,8 @@ export class GameState {
     this.currentLevelScore = 0;
     this.phase = 'playing'; // 'playing', 'shop', 'upgrade', 'gameover'
     this.rollResults = [];
+    // UI-level flag: after a roll resolves visually, we wait for player to Collect
+    this.awaitingCollect = false;
   }
 
   getMinScoreForLevel() {
@@ -32,17 +34,27 @@ export class GameState {
       value: die.roll()
     }));
     
-    const sum = results.reduce((acc, r) => acc + r.value, 0);
+    // Do not immediately apply score/currency or advance level;
+    // this is now handled by collectRoll() after the player presses Collect.
+    this.rollResults = results;
+    return results;
+  }
+
+  collectRoll() {
+    if (!this.rollResults || this.rollResults.length === 0 || this.phase !== 'playing') {
+      return;
+    }
+
+    const sum = this.rollResults.reduce((acc, r) => acc + r.value, 0);
     this.currentLevelScore += sum;
     this.currency += sum;
     this.throwsRemaining--;
-    this.rollResults = results;
-    
+
+    this.awaitingCollect = false;
+
     if (this.throwsRemaining === 0) {
       this.endLevel();
     }
-    
-    return results;
   }
 
   endLevel() {

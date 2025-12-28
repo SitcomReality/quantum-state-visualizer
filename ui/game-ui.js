@@ -1,9 +1,8 @@
 export class GameUI {
-  constructor(gameState, onThrow, onShopAction, onUpgradeAction) {
+  constructor(gameState, onThrow, onCollect) {
     this.state = gameState;
     this.onThrow = onThrow;
-    this.onShopAction = onShopAction;
-    this.onUpgradeAction = onUpgradeAction;
+    this.onCollect = onCollect;
   }
 
   render() {
@@ -66,6 +65,12 @@ export class GameUI {
       return `<div id="upgrade-container" class="flex-grow overflow-y-auto h-full"></div>`;
     }
     
+    const total =
+      this.state.rollResults && this.state.rollResults.length > 0
+        ? this.state.rollResults.reduce((a, r) => a + r.value, 0)
+        : 0;
+    const awaitingCollect = !!this.state.awaitingCollect;
+
     return `
       <div class="flex-grow flex flex-col h-full">
         <!-- Ensure the dice canvas container has a measurable height so WebGL can initialize correctly -->
@@ -76,13 +81,26 @@ export class GameUI {
               ${this.state.rollResults.map(r => `<span class="text-3xl mx-1">${r.value}</span>`).join(' + ')}
               <div class="mt-1">
                 <span class="text-sm text-slate-400">Total:</span> 
-                <span class="text-4xl font-bold text-sky-400">${this.state.rollResults.reduce((a,r) => a + r.value, 0)}</span>
+                <span class="text-4xl font-bold text-sky-400">${total}</span>
               </div>
             </div>
           ` : ''}
-          <button id="btn-throw" class="btn-primary w-full max-w-xs py-4 text-lg" ${this.state.throwsRemaining === 0 ? 'disabled' : ''}>
-            🎲 Throw Dice
-          </button>
+          <div class="flex gap-3 justify-center">
+            <button
+              id="btn-throw"
+              class="btn-primary w-full max-w-xs py-4 text-lg"
+              ${this.state.throwsRemaining === 0 || awaitingCollect || this.state.phase !== 'playing' ? 'disabled' : ''}
+            >
+              🎲 Throw Dice
+            </button>
+            <button
+              id="btn-collect"
+              class="btn-secondary w-full max-w-xs py-4 text-lg"
+              ${!awaitingCollect || this.state.rollResults.length === 0 || this.state.phase !== 'playing' ? 'disabled' : ''}
+            >
+              ⬇ Collect
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -101,7 +119,12 @@ export class GameUI {
   attachEventListeners() {
     const throwBtn = document.getElementById('btn-throw');
     if (throwBtn) {
-      throwBtn.onclick = () => this.onThrow();
+      throwBtn.onclick = () => this.onThrow && this.onThrow();
+    }
+
+    const collectBtn = document.getElementById('btn-collect');
+    if (collectBtn) {
+      collectBtn.onclick = () => this.onCollect && this.onCollect();
     }
     
     const restartBtn = document.getElementById('btn-restart');
