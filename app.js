@@ -29,24 +29,26 @@ class DiceRoguelike {
 
   setupDiceRenderer() {
     const canvas = document.getElementById('dice-canvas');
+    if (!canvas) return;
 
-    // If there's an existing renderer, dispose it because the DOM node may have been replaced
+    // If the renderer already exists and is attached to the right element, don't recreate
+    if (this.diceRenderer && this.diceRenderer.container === canvas) {
+      return;
+    }
+
     if (this.diceRenderer) {
-      try { this.diceRenderer.dispose(); } catch (e) { /* ignore */ }
-      this.diceRenderer = null;
+      try { this.diceRenderer.dispose(); } catch (e) {}
     }
 
-    if (canvas) {
-      this.diceRenderer = new DiceParticleRenderer('dice-canvas');
-      this.diceRenderer.createDieParticles(this.gameState.dice.length);
-    }
+    this.diceRenderer = new DiceParticleRenderer('dice-canvas');
+    this.diceRenderer.createDieParticles(this.gameState.dice.length);
   }
 
   handleThrow() {
+    if (!this.diceRenderer) this.setupDiceRenderer();
     if (!this.diceRenderer) return;
     if (this.gameState.awaitingCollect) return;
 
-    // Perform the roll first so we know the outcome for clustering
     const results = this.gameState.throwDice();
     if (!results) return;
 
@@ -54,13 +56,11 @@ class DiceRoguelike {
     this.lastRollTotal = total;
     this.gameState.awaitingCollect = true;
 
-    // Clamp number of clusters to keep visuals readable
-    const clusterCount = Math.max(1, Math.min(8, total));
+    const clusterCount = Math.max(1, Math.min(12, total));
 
     this.diceRenderer.animateThrow(clusterCount, () => {
-      // After roll animation completes, show results and enable Collect
       this.gameUI.render();
-      // Renderer stays attached; particles remain clumped until Collect.
+      // Particles stay clumped in the renderer's internal state
     });
   }
 
@@ -84,7 +84,13 @@ class DiceRoguelike {
         this.gameUI.render();
       } else {
         this.gameUI.render();
-        this.setupDiceRenderer();
+        // Ensure renderer is synced with the current state (num dice)
+        if (this.diceRenderer) {
+           // If we added dice in a previous level, we might want to refresh, 
+           // but for now we keep the particle count stable.
+        } else {
+          this.setupDiceRenderer();
+        }
       }
     };
 

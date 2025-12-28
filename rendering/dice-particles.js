@@ -5,22 +5,18 @@ export class DiceParticleRenderer {
     this.container = document.getElementById(containerId);
     this.scene = new THREE.Scene();
 
-    const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || window.innerHeight * 0.5;
-
-    this.camera = new THREE.PerspectiveCamera(
-      50,
-      width / height,
-      0.1,
-      1000
-    );
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
     this.camera.position.set(0, 0, 6);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.container.appendChild(this.renderer.domElement);
+
+    // Use ResizeObserver for reliable sizing
+    this.resizeObserver = new ResizeObserver(() => this.onResize());
+    this.resizeObserver.observe(this.container);
+    this.onResize();
 
     // Single particle field
     this.points = null;
@@ -462,12 +458,14 @@ export class DiceParticleRenderer {
 
   onResize() {
     if (!this.container || !this.renderer) return;
-    const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || window.innerHeight * 0.5;
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    
+    if (width === 0 || height === 0) return;
 
-    this.camera.aspect = width / Math.max(1, height);
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
 
     if (this.points) {
       const scale = this._computeBaseScale();
@@ -499,6 +497,9 @@ export class DiceParticleRenderer {
     }
 
     window.removeEventListener('resize', this._onResizeBound);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
 
     if (this.points) {
       this.scene.remove(this.points);

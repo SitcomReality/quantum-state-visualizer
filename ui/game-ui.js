@@ -72,34 +72,41 @@ export class GameUI {
     const awaitingCollect = !!this.state.awaitingCollect;
 
     return `
-      <div class="flex-grow flex flex-col h-full">
-        <!-- Ensure the dice canvas container has a measurable height so WebGL can initialize correctly -->
-        <div id="dice-canvas" class="flex-grow relative" style="flex: 1 1 auto; min-height: 100px;"></div>
-        <div class="p-6 text-center bg-gradient-to-t from-slate-900/50 to-transparent flex-shrink-0">
-          ${this.state.rollResults.length > 0 ? `
-            <div class="mb-4 transform transition-all duration-300 scale-110">
-              ${this.state.rollResults.map(r => `<span class="text-3xl mx-1">${r.value}</span>`).join(' + ')}
-              <div class="mt-1">
-                <span class="text-sm text-slate-400">Total:</span> 
-                <span class="text-4xl font-bold text-sky-400">${total}</span>
+      <div class="flex-grow flex flex-col h-full relative">
+        <!-- Persistent Canvas Layer -->
+        <div id="dice-canvas" class="absolute inset-0 z-0"></div>
+        
+        <!-- UI Overlay Layer -->
+        <div class="relative z-10 flex flex-col h-full pointer-events-none">
+          <div class="flex-grow"></div>
+          <div class="p-6 text-center bg-gradient-to-t from-slate-900/80 to-transparent flex-shrink-0 pointer-events-auto">
+            ${this.state.rollResults.length > 0 ? `
+              <div class="mb-4 transform transition-all duration-300 scale-110">
+                <div class="flex justify-center items-center gap-2">
+                  ${this.state.rollResults.map(r => `<span class="text-3xl font-bold text-white drop-shadow-lg">${r.value}</span>`).join('<span class="text-slate-500">+</span>')}
+                </div>
+                <div class="mt-1">
+                  <span class="text-sm text-slate-300">Total:</span> 
+                  <span class="text-4xl font-bold text-sky-400 drop-shadow-md">${total}</span>
+                </div>
               </div>
+            ` : ''}
+            <div class="flex gap-3 justify-center">
+              <button
+                id="btn-throw"
+                class="btn-primary w-full max-w-xs py-4 text-lg"
+                ${this.state.throwsRemaining === 0 || awaitingCollect || this.state.phase !== 'playing' ? 'disabled' : ''}
+              >
+                🎲 Throw Dice
+              </button>
+              <button
+                id="btn-collect"
+                class="btn-secondary w-full max-w-xs py-4 text-lg"
+                ${!awaitingCollect || this.state.rollResults.length === 0 || this.state.phase !== 'playing' ? 'disabled' : ''}
+              >
+                ⬇ Collect
+              </button>
             </div>
-          ` : ''}
-          <div class="flex gap-3 justify-center">
-            <button
-              id="btn-throw"
-              class="btn-primary w-full max-w-xs py-4 text-lg"
-              ${this.state.throwsRemaining === 0 || awaitingCollect || this.state.phase !== 'playing' ? 'disabled' : ''}
-            >
-              🎲 Throw Dice
-            </button>
-            <button
-              id="btn-collect"
-              class="btn-secondary w-full max-w-xs py-4 text-lg"
-              ${!awaitingCollect || this.state.rollResults.length === 0 || this.state.phase !== 'playing' ? 'disabled' : ''}
-            >
-              ⬇ Collect
-            </button>
           </div>
         </div>
       </div>
