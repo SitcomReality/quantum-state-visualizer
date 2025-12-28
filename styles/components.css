@@ -1,0 +1,96 @@
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--bg-dark);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.btn-primary:hover {
+  background: #0ea5e9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg-light);
+  color: var(--text-primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-medium);
+}
+
+.stat-box {
+  background: var(--bg-medium);
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--accent-primary);
+}
+
+.die-card {
+  background: var(--bg-medium);
+  border: 2px solid var(--bg-light);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.die-card:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+}
+
+.upgrade-option {
+  background: var(--bg-medium);
+  border: 2px solid var(--bg-light);
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upgrade-option:hover {
+  border-color: var(--success);
+  transform: scale(1.02);
+}
+
+.shop-item {
+  background: var(--bg-medium);
+  border: 2px solid var(--bg-light);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shop-item:hover {
+  border-color: var(--accent-secondary);
+  transform: scale(1.02);
+}
+
+.shop-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
