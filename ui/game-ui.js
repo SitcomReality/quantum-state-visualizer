@@ -9,9 +9,11 @@ export class GameUI {
   render() {
     const app = document.getElementById('app');
     app.innerHTML = `
-      <div class="flex flex-col h-full">
+      <div class="flex flex-col h-full w-full overflow-hidden">
         ${this.renderHeader()}
-        ${this.renderMainArea()}
+        <main class="flex-grow flex flex-col min-h-0 overflow-hidden">
+          ${this.renderMainArea()}
+        </main>
         ${this.renderBottomPanel()}
       </div>
     `;
@@ -46,7 +48,7 @@ export class GameUI {
   renderMainArea() {
     if (this.state.phase === 'gameover') {
       return `
-        <div class="flex-grow flex items-center justify-center">
+        <div class="flex-grow flex items-center justify-center h-full">
           <div class="glass p-8 text-center">
             <h2 class="text-2xl font-bold mb-4">Game Over</h2>
             <p class="mb-4">You reached level ${this.state.level}</p>
@@ -57,18 +59,18 @@ export class GameUI {
     }
     
     if (this.state.phase === 'shop') {
-      return `<div id="shop-container" class="flex-grow overflow-auto"></div>`;
+      return `<div id="shop-container" class="flex-grow overflow-y-auto h-full"></div>`;
     }
     
     if (this.state.phase === 'upgrade') {
-      return `<div id="upgrade-container" class="flex-grow overflow-auto"></div>`;
+      return `<div id="upgrade-container" class="flex-grow overflow-y-auto h-full"></div>`;
     }
     
     return `
-      <div class="flex-grow flex flex-col">
+      <div class="flex-grow flex flex-col h-full">
         <!-- Ensure the dice canvas container has a measurable height so WebGL can initialize correctly -->
-        <div id="dice-canvas" class="flex-grow" style="flex: 1 1 auto; min-width: 200px;"></div>
-        <div class="p-6 text-center bg-gradient-to-t from-slate-900/50 to-transparent">
+        <div id="dice-canvas" class="flex-grow relative" style="flex: 1 1 auto; min-height: 100px;"></div>
+        <div class="p-6 text-center bg-gradient-to-t from-slate-900/50 to-transparent flex-shrink-0">
           ${this.state.rollResults.length > 0 ? `
             <div class="mb-4 transform transition-all duration-300 scale-110">
               ${this.state.rollResults.map(r => `<span class="text-3xl mx-1">${r.value}</span>`).join(' + ')}

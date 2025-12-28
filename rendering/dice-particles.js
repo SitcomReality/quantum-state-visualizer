@@ -15,7 +15,12 @@ export class DiceParticleRenderer {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    
+    // Safety fallback: if clientHeight is 0, try to use parent or a default ratio
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || (window.innerHeight * 0.5);
+    
+    this.renderer.setSize(width, height);
     this.container.appendChild(this.renderer.domElement);
 
     this.diceParticles = [];
