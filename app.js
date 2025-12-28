@@ -66,7 +66,10 @@ class DiceRoguelike {
     this.shopUI = new ShopUI(
       this.gameState,
       () => this.handleShopPurchase(),
-      () => this.gameState.proceedToUpgrade() && this.showUpgrade()
+      () => {
+        this.gameState.proceedToUpgrade();
+        this.showUpgrade();
+      }
     );
     this.gameUI.render();
     this.shopUI.render();
