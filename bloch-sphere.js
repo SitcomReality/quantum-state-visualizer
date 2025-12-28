@@ -18,6 +18,7 @@ export class BlochSphereRenderer {
     this.controls.dampingFactor = 0.05;
 
     this.setupSphere();
+    this.setupCloud();
     this.setupLights();
     this.animate();
 
@@ -26,12 +27,12 @@ export class BlochSphereRenderer {
 
   setupSphere() {
     // Sphere wireframe
-    const geometry = new THREE.SphereGeometry(1, 32, 32);
+    const geometry = new THREE.SphereGeometry(1, 24, 24);
     const material = new THREE.MeshBasicMaterial({ 
       color: 0x475569, 
       wireframe: true, 
       transparent: true, 
-      opacity: 0.1 
+      opacity: 0.05 
     });
     const sphere = new THREE.Mesh(geometry, material);
     this.scene.add(sphere);
@@ -61,9 +62,53 @@ export class BlochSphereRenderer {
 
     // State point
     const pointGeo = new THREE.SphereGeometry(0.04, 16, 16);
-    const pointMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const pointMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     this.point = new THREE.Mesh(pointGeo, pointMat);
     this.scene.add(this.point);
+  }
+
+  setupCloud() {
+    const numPoints = 2000;
+    const positions = new Float32Array(numPoints * 3);
+    const colors = new Float32Array(numPoints * 3);
+    const sizes = new Float32Array(numPoints);
+
+    // Fibonacci Sphere for uniform distribution
+    const phi = Math.PI * (Math.sqrt(5) - 1); // golden angle
+    for (let i = 0; i < numPoints; i++) {
+      const y = 1 - (i / (numPoints - 1)) * 2;
+      const radius = Math.sqrt(1 - y * y);
+      const theta = phi * i;
+
+      const x = Math.cos(theta) * radius;
+      const z = Math.sin(theta) * radius;
+
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      
+      colors[i * 3] = 0.2;
+      colors[i * 3 + 1] = 0.5;
+      colors[i * 3 + 2] = 0.8;
+      sizes[i] = 1.0;
+    }
+
+    this.cloudGeometry = new THREE.BufferGeometry();
+    this.cloudGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.cloudGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.cloudGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.03,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    });
+
+    this.cloud = new THREE.Points(this.cloudGeometry, material);
+    this.scene.add(this.cloud);
   }
 
   createLabel(text, pos, color) {
@@ -97,26 +142,45 @@ export class BlochSphereRenderer {
   }
 
   updateVector(rx, ry, rz) {
-    // In Three.js standard coordinates:
-    // User rx -> X
-    // User ry -> Y
-    // User rz -> Z
-    // Note: Standard Bloch sphere has Z vertical.
-    // Three.js vertical is Y. We swap Z and Y for visual mapping if needed, 
-    // but usually we just let users see the coordinates as defined.
-    // Let's stick to standard Physics convention where Z is UP.
-    // So Z stays Z, but in Three.js Z is forward/back. 
-    // Let's map Z to Three.js Y (Vertical).
-    
-    const dir = new THREE.Vector3(rx, rz, -ry); // Mapping for visual intuition: rz is 'up'
+    // Mapping: rz is vertical (Y in Three.js), rx is X, ry is -Z
+    const dir = new THREE.Vector3(rx, rz, -ry); 
     const len = dir.length();
-    if (len > 0) {
+    
+    if (len > 0.001) {
       this.vector.setDirection(dir.clone().normalize());
       this.vector.setLength(len, 0.1, 0.05);
       this.point.position.copy(dir);
     } else {
       this.vector.setLength(0);
-      this.point.position.set(0,0,0);
+      this.point.position.set(0, 0, 0);
+    }
+
+    // Update Probability Cloud
+    if (this.cloudGeometry) {
+      const colors = this.cloudGeometry.attributes.color.array;
+      const positions = this.cloudGeometry.attributes.position.array;
+      
+      // The probability of measuring state in direction 'n' given Bloch vector 'r'
+      // P = (1 + r · n) / 2
+      for (let i = 0; i < colors.length / 3; i++) {
+        const px = positions[i * 3];
+        const py = positions[i * 3 + 1];
+        const pz = positions[i * 3 + 2];
+
+        // Dot product with the state vector
+        const dot = px * dir.x + py * dir.y + pz * dir.z;
+        const prob = (1 + dot) / 2;
+        
+        // Map probability to color intensity
+        // We use a non-linear scaling to make the "hotspot" more apparent
+        const intensity = Math.pow(prob, 2.5);
+        
+        // Color gradient from dark slate to bright sky blue
+        colors[i * 3] = 0.1 + intensity * 0.3;     // R
+        colors[i * 3 + 1] = 0.2 + intensity * 0.7; // G
+        colors[i * 3 + 2] = 0.3 + intensity * 1.0; // B
+      }
+      this.cloudGeometry.attributes.color.needsUpdate = true;
     }
   }
 

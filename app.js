@@ -5,9 +5,28 @@ class App {
   constructor() {
     this.renderer = new BlochSphereRenderer('canvas-container');
     this.state = new QubitState(0, 0, 1);
+    this.audioCtx = null;
+    this.clickSound = null;
     
     this.initUI();
     this.update();
+  }
+
+  async playTick() {
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const res = await fetch('/click.mp3');
+      const arrayBuffer = await res.arrayBuffer();
+      this.clickSound = await this.audioCtx.decodeAudioData(arrayBuffer);
+    }
+    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = this.clickSound;
+    const gain = this.audioCtx.createGain();
+    gain.gain.value = 0.1;
+    source.connect(gain);
+    gain.connect(this.audioCtx.destination);
+    source.start(0);
   }
 
   initUI() {
@@ -34,7 +53,10 @@ class App {
       this.update();
     };
 
-    Object.values(sliders).forEach(s => s.addEventListener('input', updateFromSliders));
+    Object.values(sliders).forEach(s => s.addEventListener('input', () => {
+      updateFromSliders();
+      this.playTick();
+    }));
 
     // Preset Buttons
     document.getElementById('btn-zero').onclick = () => this.setPreset(0, 0, 1);
@@ -48,6 +70,7 @@ class App {
     document.getElementById('slider-ry').value = y;
     document.getElementById('slider-rz').value = z;
     this.state = new QubitState(x, y, z);
+    this.playTick();
     this.update();
   }
 
