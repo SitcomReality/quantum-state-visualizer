@@ -8,14 +8,20 @@ export class GameState {
     this.dice = GAME_CONFIG.INITIAL_DICE.map(d => new Die(d.sides, d.values));
     this.throwsRemaining = GAME_CONFIG.INITIAL_THROWS;
     this.currentLevelScore = 0;
-    this.entropy = 0;
     this.phase = 'playing'; // 'playing', 'shop', 'upgrade', 'gameover'
     this.rollResults = [];
   }
 
   getMinScoreForLevel() {
-    return GAME_CONFIG.LEVEL_SCALING.minScoreBase + 
-           (this.level - 1) * GAME_CONFIG.LEVEL_SCALING.minScoreIncrease;
+    // Exponential scaling to match dice growth
+    const base = GAME_CONFIG.LEVEL_SCALING.minScoreBase;
+    const growth = GAME_CONFIG.LEVEL_SCALING.growthFactor;
+    return Math.floor(base * Math.pow(growth, this.level - 1));
+  }
+
+  get entropy() {
+    if (this.dice.length === 0) return 0;
+    return this.dice.reduce((sum, d) => sum + d.entropy, 0) / this.dice.length;
   }
 
   throwDice() {
@@ -23,7 +29,7 @@ export class GameState {
     
     const results = this.dice.map(die => ({
       die: die,
-      value: die.roll(this.entropy)
+      value: die.roll()
     }));
     
     const sum = results.reduce((acc, r) => acc + r.value, 0);

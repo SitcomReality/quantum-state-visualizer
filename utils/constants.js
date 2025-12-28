@@ -6,8 +6,8 @@ export const GAME_CONFIG = {
   
   LEVEL_SCALING: {
     throwsPerLevel: 3,
-    minScoreBase: 10,
-    minScoreIncrease: 5
+    minScoreBase: 12,
+    growthFactor: 1.35
   },
   
   SHOP: {
@@ -24,6 +24,11 @@ export const GAME_CONFIG = {
     common: 1,
     uncommon: 2,
     rare: 3
+  },
+  
+  QUANTUM: {
+    decay: 0.8,
+    valueMult: 1.5
   }
 };
 

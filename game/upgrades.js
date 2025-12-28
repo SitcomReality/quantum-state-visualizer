@@ -3,32 +3,29 @@ import { GAME_CONFIG } from '../utils/constants.js';
 export class UpgradeSystem {
   generateUpgradeOptions(dice) {
     const options = [];
-    const allFaces = [];
     
-    // Collect all faces from all dice
-    dice.forEach((die, dieIndex) => {
-      die.values.forEach((value, faceIndex) => {
-        allFaces.push({ dieIndex, die, faceIndex, currentValue: value });
+    // We offer to upgrade whole dice now (Quantum Purification)
+    // Create options for up to 3 different dice
+    const diceIndices = dice.map((_, i) => i);
+    const shuffled = diceIndices.sort(() => Math.random() - 0.5);
+    
+    const selectedIndices = shuffled.slice(0, 3);
+    
+    selectedIndices.forEach((dieIndex, i) => {
+      options.push({
+        type: 'quantum',
+        dieIndex: dieIndex,
+        die: dice[dieIndex],
+        rarity: 'rare' // Quantum upgrades are powerful
       });
     });
-    
-    // Shuffle and pick 3
-    const shuffled = allFaces.sort(() => Math.random() - 0.5);
-    const rarities = ['common', 'uncommon', 'rare'];
-    
-    for (let i = 0; i < Math.min(3, shuffled.length); i++) {
-      const rarity = rarities[Math.min(i, rarities.length - 1)];
-      options.push({
-        ...shuffled[i],
-        upgradeAmount: GAME_CONFIG.UPGRADES[rarity],
-        rarity
-      });
-    }
     
     return options;
   }
 
   applyUpgrade(option) {
-    option.die.upgradeFace(option.faceIndex, option.upgradeAmount);
+    if (option.type === 'quantum') {
+      option.die.upgrade();
+    }
   }
 }
