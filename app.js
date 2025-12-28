@@ -31,15 +31,51 @@ class DiceRoguelike {
     const canvas = document.getElementById('dice-canvas');
     if (!canvas) return;
 
-    // If the renderer already exists and is attached to the right element, don't recreate
-    if (this.diceRenderer && this.diceRenderer.container === canvas) {
-      return;
-    }
-
+    // If we already have a renderer, try to reattach it to the (possibly newly re-created) canvas element
     if (this.diceRenderer) {
-      try { this.diceRenderer.dispose(); } catch (e) {}
+      // If the stored container is not the current DOM element (UI was re-rendered),
+      // reattach the renderer.domElement into the new canvas container.
+      if (this.diceRenderer.container !== canvas || !this.diceRenderer.container.isConnected) {
+        try {
+          // Update internal container reference
+          this.diceRenderer.container = canvas;
+
+          // If renderer exists, append its DOM element to the new container if not present
+          if (this.diceRenderer.renderer && this.diceRenderer.renderer.domElement) {
+            // Remove from previous parent if still attached somewhere
+            const el = this.diceRenderer.renderer.domElement;
+            if (el.parentNode !== canvas) {
+              if (el.parentNode) el.parentNode.removeChild(el);
+              canvas.appendChild(el);
+            }
+          }
+
+          // Trigger a resize so the renderer updates to the new container size
+          if (typeof this.diceRenderer.onResize === 'function') {
+            this.diceRenderer.onResize();
+          } else {
+            // fallback: call renderer.setSize directly
+            const width = canvas.clientWidth || window.innerWidth;
+            const height = canvas.clientHeight || Math.max(200, window.innerHeight * 0.4);
+            this.diceRenderer.renderer.setSize(width, height, false);
+            this.diceRenderer.camera.aspect = width / Math.max(1, height);
+            this.diceRenderer.camera.updateProjectionMatrix();
+          }
+        } catch (e) {
+          console.warn('Failed to reattach dice renderer, recreating:', e);
+          try { this.diceRenderer.dispose(); } catch (err) {}
+          this.diceRenderer = null;
+        }
+      }
+
+      // Ensure particle geometry matches current dice count
+      if (this.diceRenderer) {
+        this.diceRenderer.createDieParticles(this.gameState.dice.length);
+        return;
+      }
     }
 
+    // No existing renderer: create fresh
     this.diceRenderer = new DiceParticleRenderer('dice-canvas');
     this.diceRenderer.createDieParticles(this.gameState.dice.length);
   }
