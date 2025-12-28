@@ -4,9 +4,13 @@ export class DiceParticleRenderer {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
     this.scene = new THREE.Scene();
+
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight * 0.5;
+
     this.camera = new THREE.PerspectiveCamera(
       50,
-      this.container.clientWidth / this.container.clientHeight,
+      width / height,
       0.1,
       1000
     );
@@ -15,22 +19,33 @@ export class DiceParticleRenderer {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    
-    // Safety fallback: if clientHeight is 0, try to use parent or a default ratio
-    const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || (window.innerHeight * 0.5);
-    
     this.renderer.setSize(width, height);
     this.container.appendChild(this.renderer.domElement);
 
-    this.diceParticles = [];
-    this.isAnimating = false;
+    // Single particle field
+    this.points = null;
+    this.numParticles = 1200;
 
-    // internal handles for proper cleanup
+    // Per-particle simulation data
+    this.basePositions = null;      // idle cube positions
+    this.velocities = null;         // idle velocities
+    this.clusterTargets = null;     // target positions during clump animation
+    this.clusterCenters = [];       // current set of cluster centers
+    this.clusterCount = 1;
+
+    // Animation state
+    this.phase = 'idle';            // 'idle' | 'rolling' | 'clumped'
+    this.rollStartTime = 0;
+    this.rollDuration = 1500;
+    this.rollCallback = null;
+
+    // Timekeeping
+    this._lastTime = performance.now();
     this._rafId = null;
     this._onResizeBound = this.onResize.bind(this);
 
     this.setupLights();
+    this.createDieParticles();
     this._startMainLoop();
 
     window.addEventListener('resize', this._onResizeBound);
@@ -44,148 +59,355 @@ export class DiceParticleRenderer {
     this.scene.add(point);
   }
 
-  createDieParticles(numDice) {
-    // Clear existing
-    this.diceParticles.forEach(p => {
-      this.scene.remove(p);
-      if (p.geometry) p.geometry.dispose();
-      if (p.material) {
-        if (p.material.map) p.material.map.dispose();
-        p.material.dispose();
-      }
+  // We no longer care about numDice for geometry; keep signature for compatibility.
+  createDieParticles(_numDice = 1) {
+    if (this.points) {
+      this.scene.remove(this.points);
+      this.points.geometry.dispose();
+      this.points.material.dispose();
+      this.points = null;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(this.numParticles * 3);
+    const colors = new Float32Array(this.numParticles * 3);
+    this.basePositions = new Float32Array(this.numParticles * 3);
+    this.velocities = new Float32Array(this.numParticles * 3);
+    this.clusterTargets = new Float32Array(this.numParticles * 3);
+
+    // Initial diffuse cube
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+
+      // Cube in [-0.5, 0.5]^3
+      const x = (Math.random() - 0.5);
+      const y = (Math.random() - 0.5);
+      const z = (Math.random() - 0.5);
+
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+
+      this.basePositions[idx] = x;
+      this.basePositions[idx + 1] = y;
+      this.basePositions[idx + 2] = z;
+
+      // Random small velocity for swirling
+      this.velocities[idx] = (Math.random() - 0.5) * 0.15;
+      this.velocities[idx + 1] = (Math.random() - 0.5) * 0.15;
+      this.velocities[idx + 2] = (Math.random() - 0.5) * 0.15;
+
+      // Soft blue-ish colors
+      colors[idx] = 0.3 + Math.random() * 0.2;
+      colors[idx + 1] = 0.6 + Math.random() * 0.3;
+      colors[idx + 2] = 0.9 + Math.random() * 0.1;
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.035,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.75,
+      blending: THREE.AdditiveBlending
     });
-    this.diceParticles = [];
 
-    // Basic desired baseScale before applying viewport cap
-    const desiredBase = numDice === 1 ? 4.5 : Math.max(1.8, 5 / Math.sqrt(numDice));
-    const spacingBase = numDice === 1 ? 0 : desiredBase * 0.8;
-    const startX = -(numDice - 1) * spacingBase / 2;
+    this.points = new THREE.Points(geometry, material);
 
-    // Compute world-space visible size at camera distance to convert pixels -> world units
+    // Scale so that the cube occupies ~75% of min viewport dimension
+    const baseScale = this._computeBaseScale();
+    this.points.scale.setScalar(baseScale);
+
+    this.scene.add(this.points);
+  }
+
+  _computeBaseScale() {
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight * 0.5;
+
     const fovRad = (this.camera.fov * Math.PI) / 180;
     const worldHeight = 2 * Math.tan(fovRad / 2) * Math.abs(this.camera.position.z);
-    const worldWidth = worldHeight * (this.container.clientWidth / Math.max(1, this.container.clientHeight));
-
-    // Maximum allowed world size for a die (75% of the smaller canvas dimension)
+    const worldWidth = worldHeight * (width / Math.max(1, height));
     const maxWorldDim = 0.75 * Math.min(worldWidth, worldHeight);
 
-    // Convert an approximate desiredBase (which was tuned in world units) to be capped by maxWorldDim.
-    // We choose to clamp the scalar so the die's full extents remain within ~75% of view.
-    const capScale = Math.max(0.1, maxWorldDim * 0.5); // *0.5 to treat baseScale as half-extent proportional
-    const baseScale = Math.min(desiredBase, capScale);
-    const spacing = numDice === 1 ? 0 : baseScale * 0.8;
+    // Our cube is ~1 unit across; choose scale so it fits within 75% of view
+    const capScale = Math.max(0.1, maxWorldDim * 0.5);
+    return capScale;
+  }
 
-    for (let i = 0; i < numDice; i++) {
-      const geometry = new THREE.BufferGeometry();
-      const numParticles = numDice === 1 ? 800 : 300; // More particles for the large single die
-      const positions = new Float32Array(numParticles * 3);
-      const colors = new Float32Array(numParticles * 3);
+  // clusterCount is how many clumps we want to end up with (clamped externally)
+  animateThrow(clusterCount, callback) {
+    if (!this.points) return;
 
-      for (let j = 0; j < numParticles; j++) {
-        // Uniform distribution in a cube
-        positions[j * 3] = (Math.random() - 0.5);
-        positions[j * 3 + 1] = (Math.random() - 0.5);
-        positions[j * 3 + 2] = (Math.random() - 0.5);
+    this.phase = 'rolling';
+    this.rollStartTime = performance.now();
+    this.rollDuration = 1500;
+    this.rollCallback = callback;
+    this.clusterCount = Math.max(1, clusterCount | 0);
 
-        colors[j * 3] = 0.3 + Math.random() * 0.2;
-        colors[j * 3 + 1] = 0.6 + Math.random() * 0.3;
-        colors[j * 3 + 2] = 0.9 + Math.random() * 0.1;
-      }
+    this._computeClusterCenters();
+    this._assignClusterTargets();
+  }
 
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  _computeClusterCenters() {
+    this.clusterCenters = [];
 
-      const material = new THREE.PointsMaterial({
-        size: numDice === 1 ? 0.04 : 0.03,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.7,
-        blending: THREE.AdditiveBlending
-      });
+    const n = this.clusterCount;
+    if (n === 1) {
+      this.clusterCenters.push(new THREE.Vector3(0, 0, 0));
+      return;
+    }
 
-      const particles = new THREE.Points(geometry, material);
-      particles.scale.setScalar(baseScale);
-      particles.position.x = startX + i * spacing;
-      particles.userData = {
-        baseScale: baseScale,
-        rotationSpeed: 0.08 + Math.random() * 0.05
-      };
+    // Arrange clusters in a horizontal line or small grid, centered
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    const spacing = 0.5; // in local particle space
 
-      this.scene.add(particles);
-      this.diceParticles.push(particles);
+    const totalWidth = (cols - 1) * spacing;
+    const totalHeight = (rows - 1) * spacing;
+
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const x = col * spacing - totalWidth / 2;
+      const y = totalHeight / 2 - row * spacing;
+      const z = 0;
+      this.clusterCenters.push(new THREE.Vector3(x, y, z));
     }
   }
 
-  animateThrow(callback) {
-    this.isAnimating = true;
-    const duration = 1500;
-    const startTime = Date.now();
+  _assignClusterTargets() {
+    // For each particle, assign to a cluster and give it a local spherical offset
+    const radius = 0.12; // compact clump radius
 
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+      const clusterIndex = i % this.clusterCount;
+      const center = this.clusterCenters[clusterIndex];
 
-      this.diceParticles.forEach(p => {
-        const base = p.userData.baseScale;
-        // Spin wildly
-        p.rotation.x += p.userData.rotationSpeed * (2 - progress);
-        p.rotation.y += p.userData.rotationSpeed * (2 - progress);
+      // Random point in sphere
+      const u = Math.random();
+      const v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const r = radius * Math.cbrt(Math.random());
 
-        // Expand and contract around the base scale
-        const scaleMod = 1 + Math.sin(progress * Math.PI * 4) * 0.2 * (1 - progress);
-        p.scale.setScalar(base * scaleMod);
-      });
+      const sx = r * Math.sin(phi) * Math.cos(theta);
+      const sy = r * Math.sin(phi) * Math.sin(theta);
+      const sz = r * Math.cos(phi);
 
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        this.isAnimating = false;
-        if (callback) callback();
-      }
-    };
-
-    animate();
+      this.clusterTargets[idx] = center.x + sx;
+      this.clusterTargets[idx + 1] = center.y + sy;
+      this.clusterTargets[idx + 2] = center.z + sz;
+    }
   }
 
-  showResults(results) {
-    // Display result numbers on particles (kept for possible future use)
-    results.forEach((result, i) => {
-      if (i < this.diceParticles.length) {
-        const particles = this.diceParticles[i];
-        particles.userData.displayValue = result.value;
+  _updateIdle(dt) {
+    if (!this.points) return;
+    const positions = this.points.geometry.attributes.position.array;
+
+    // Particles swirl around their base cube positions
+    const springStrength = 0.9;   // how strongly they stay near cube
+    const maxOffset = 0.6;        // cube "radius"
+
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+
+      let x = positions[idx];
+      let y = positions[idx + 1];
+      let z = positions[idx + 2];
+
+      const bx = this.basePositions[idx];
+      const by = this.basePositions[idx + 1];
+      const bz = this.basePositions[idx + 2];
+
+      let vx = this.velocities[idx];
+      let vy = this.velocities[idx + 1];
+      let vz = this.velocities[idx + 2];
+
+      // Simple spring toward base position
+      vx += (bx - x) * springStrength * dt;
+      vy += (by - y) * springStrength * dt;
+      vz += (bz - z) * springStrength * dt;
+
+      // Add small swirling noise
+      vx += (Math.random() - 0.5) * 0.05 * dt;
+      vy += (Math.random() - 0.5) * 0.05 * dt;
+      vz += (Math.random() - 0.5) * 0.05 * dt;
+
+      // Integrate
+      x += vx * dt;
+      y += vy * dt;
+      z += vz * dt;
+
+      // Soft bounds to keep diffuse cube
+      const clamp = (val) => Math.max(-maxOffset, Math.min(maxOffset, val));
+      x = clamp(x);
+      y = clamp(y);
+      z = clamp(z);
+
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+
+      this.velocities[idx] = vx;
+      this.velocities[idx + 1] = vy;
+      this.velocities[idx + 2] = vz;
+    }
+
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.rotation.y += 0.1 * dt;
+  }
+
+  _updateRolling(dt) {
+    if (!this.points) return;
+    const positions = this.points.geometry.attributes.position.array;
+
+    const now = performance.now();
+    const t = Math.min(1, (now - this.rollStartTime) / this.rollDuration);
+    const ease = t < 0.5
+      ? 2 * t * t
+      : -1 + (4 - 2 * t) * t; // smooth ease in-out
+
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+
+      const sx = this.basePositions[idx];
+      const sy = this.basePositions[idx + 1];
+      const sz = this.basePositions[idx + 2];
+
+      const tx = this.clusterTargets[idx];
+      const ty = this.clusterTargets[idx + 1];
+      const tz = this.clusterTargets[idx + 2];
+
+      // Interpolate from cube to cluster targets
+      const x = sx + (tx - sx) * ease;
+      const y = sy + (ty - sy) * ease;
+      const z = sz + (tz - sz) * ease;
+
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+    }
+
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.rotation.y += 0.3 * dt;
+
+    if (t >= 1) {
+      // Transition to clumped idle
+      this.phase = 'clumped';
+      // Update base positions to new cluster layout, so they drift gently around clumps
+      for (let i = 0; i < this.numParticles * 3; i++) {
+        this.basePositions[i] = positions[i];
       }
-    });
+      // Slightly randomize velocities for gentle motion
+      for (let i = 0; i < this.numParticles * 3; i++) {
+        this.velocities[i] = (Math.random() - 0.5) * 0.08;
+      }
+
+      if (this.rollCallback) {
+        const cb = this.rollCallback;
+        this.rollCallback = null;
+        cb();
+      }
+    }
+  }
+
+  _updateClumped(dt) {
+    if (!this.points) return;
+    const positions = this.points.geometry.attributes.position.array;
+
+    const springStrength = 0.6;
+    const maxOffset = 0.18; // keep particles near clump centers
+
+    for (let i = 0; i < this.numParticles; i++) {
+      const idx = i * 3;
+
+      let x = positions[idx];
+      let y = positions[idx + 1];
+      let z = positions[idx + 2];
+
+      const bx = this.basePositions[idx];
+      const by = this.basePositions[idx + 1];
+      const bz = this.basePositions[idx + 2];
+
+      let vx = this.velocities[idx];
+      let vy = this.velocities[idx + 1];
+      let vz = this.velocities[idx + 2];
+
+      // Gentle spring around clump center
+      vx += (bx - x) * springStrength * dt;
+      vy += (by - y) * springStrength * dt;
+      vz += (bz - z) * springStrength * dt;
+
+      // Small jitter
+      vx += (Math.random() - 0.5) * 0.03 * dt;
+      vy += (Math.random() - 0.5) * 0.03 * dt;
+      vz += (Math.random() - 0.5) * 0.03 * dt;
+
+      x += vx * dt;
+      y += vy * dt;
+      z += vz * dt;
+
+      const clamp = (val, base) =>
+        Math.max(base - maxOffset, Math.min(base + maxOffset, val));
+
+      x = clamp(x, bx);
+      y = clamp(y, by);
+      z = clamp(z, bz);
+
+      positions[idx] = x;
+      positions[idx + 1] = y;
+      positions[idx + 2] = z;
+
+      this.velocities[idx] = vx;
+      this.velocities[idx + 1] = vy;
+      this.velocities[idx + 2] = vz;
+    }
+
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.rotation.y += 0.15 * dt;
+  }
+
+  _updateSimulation(dt) {
+    if (!this.points) return;
+
+    if (this.phase === 'idle') {
+      this._updateIdle(dt);
+    } else if (this.phase === 'rolling') {
+      this._updateRolling(dt);
+    } else if (this.phase === 'clumped') {
+      this._updateClumped(dt);
+    }
   }
 
   onResize() {
     if (!this.container || !this.renderer) return;
-    // Update camera and renderer sizes
-    this.camera.aspect = this.container.clientWidth / Math.max(1, this.container.clientHeight);
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight * 0.5;
+
+    this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer.setSize(width, height);
 
-    // Recompute world-space visible dimensions and cap for die sizes
-    const fovRad = (this.camera.fov * Math.PI) / 180;
-    const worldHeight = 2 * Math.tan(fovRad / 2) * Math.abs(this.camera.position.z);
-    const worldWidth = worldHeight * (this.container.clientWidth / Math.max(1, this.container.clientHeight));
-    const maxWorldDim = 0.75 * Math.min(worldWidth, worldHeight);
-    const capScale = Math.max(0.1, maxWorldDim * 0.5);
-
-    // Apply cap to all existing dice particle groups so they remain within the new viewport
-    this.diceParticles.forEach(p => {
-      const desired = p.userData.baseScale || p.scale.x || 1;
-      const newBase = Math.min(desired, capScale);
-      p.userData.baseScale = newBase;
-      // Preserve any transient animation scale factor by normalizing current scale to base then applying new base
-      const currentScale = p.scale.x || newBase;
-      const animFactor = currentScale / Math.max(1e-6, desired);
-      p.scale.setScalar(newBase * animFactor);
-    });
+    if (this.points) {
+      const scale = this._computeBaseScale();
+      this.points.scale.setScalar(scale);
+    }
   }
 
   _startMainLoop() {
     const loop = () => {
       this._rafId = requestAnimationFrame(loop);
+
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - this._lastTime) / 1000);
+      this._lastTime = now;
+
+      this._updateSimulation(dt);
+
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }
@@ -194,27 +416,20 @@ export class DiceParticleRenderer {
   }
 
   dispose() {
-    // Stop RAF
     if (this._rafId) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
 
-    // Remove resize listener
     window.removeEventListener('resize', this._onResizeBound);
 
-    // Dispose particles
-    this.diceParticles.forEach(p => {
-      this.scene.remove(p);
-      if (p.geometry) p.geometry.dispose();
-      if (p.material) {
-        if (p.material.map) p.material.map.dispose();
-        p.material.dispose();
-      }
-    });
-    this.diceParticles = [];
+    if (this.points) {
+      this.scene.remove(this.points);
+      this.points.geometry.dispose();
+      this.points.material.dispose();
+      this.points = null;
+    }
 
-    // Dispose renderer and remove DOM element
     if (this.renderer) {
       try {
         this.renderer.forceContextLoss();
@@ -226,7 +441,6 @@ export class DiceParticleRenderer {
       this.renderer = null;
     }
 
-    // Clean up scene references
     this.scene = null;
     this.camera = null;
     this.container = null;

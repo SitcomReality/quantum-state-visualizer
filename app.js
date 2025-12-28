@@ -44,20 +44,26 @@ class DiceRoguelike {
 
   handleThrow() {
     if (!this.diceRenderer) return;
-    
-    this.diceRenderer.animateThrow(() => {
-      const results = this.gameState.throwDice();
-      if (results) {
-        this.diceRenderer.showResults(results);
+
+    // Perform the roll first so we know the outcome for clustering
+    const results = this.gameState.throwDice();
+    if (!results) return;
+
+    const total = results.reduce((sum, r) => sum + r.value, 0);
+    // Clamp number of clusters to keep visuals readable
+    const clusterCount = Math.max(1, Math.min(8, total));
+
+    this.diceRenderer.animateThrow(clusterCount, () => {
+      this.gameUI.render();
+
+      if (this.gameState.phase === 'shop') {
+        this.showShop();
+      } else if (this.gameState.phase === 'gameover') {
         this.gameUI.render();
-        
-        if (this.gameState.phase === 'shop') {
-          this.showShop();
-        } else if (this.gameState.phase === 'gameover') {
-          this.gameUI.render();
-        } else {
-          this.setupDiceRenderer();
-        }
+      } else {
+        // After the roll, keep using the same renderer (already in clumped state)
+        // but we still recreate geometry if dice count changed significantly.
+        this.setupDiceRenderer();
       }
     });
   }
