@@ -131,8 +131,8 @@ export class DiceParticleRenderer {
   }
 
   _computeBaseScale() {
-    const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || window.innerHeight * 0.5;
+    const width = this.container?.clientWidth || window.innerWidth;
+    const height = this.container?.clientHeight || window.innerHeight;
 
     const fovRad = (this.camera.fov * Math.PI) / 180;
     const worldHeight = 2 * Math.tan(fovRad / 2) * Math.abs(this.camera.position.z);

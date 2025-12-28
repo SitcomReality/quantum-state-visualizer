@@ -72,12 +72,9 @@ export class GameUI {
     const awaitingCollect = !!this.state.awaitingCollect;
 
     return `
-      <div class="flex-grow flex flex-col h-full relative">
-        <!-- Persistent Canvas Layer -->
-        <div id="dice-canvas" class="absolute inset-0 z-0"></div>
-        
+      <div class="flex-grow flex flex-col h-full relative pointer-events-none">
         <!-- UI Overlay Layer -->
-        <div class="relative z-10 flex flex-col h-full pointer-events-none">
+        <div class="relative z-10 flex flex-col h-full">
           <div class="flex-grow"></div>
           <div class="p-6 text-center bg-gradient-to-t from-slate-900/80 to-transparent flex-shrink-0 pointer-events-auto">
             ${this.state.rollResults.length > 0 ? `
