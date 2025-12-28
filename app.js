@@ -29,7 +29,14 @@ class DiceRoguelike {
 
   setupDiceRenderer() {
     const canvas = document.getElementById('dice-canvas');
-    if (canvas && !this.diceRenderer) {
+
+    // If there's an existing renderer, dispose it because the DOM node may have been replaced
+    if (this.diceRenderer) {
+      try { this.diceRenderer.dispose(); } catch (e) { /* ignore */ }
+      this.diceRenderer = null;
+    }
+
+    if (canvas) {
       this.diceRenderer = new DiceParticleRenderer('dice-canvas');
       this.diceRenderer.createDieParticles(this.gameState.dice.length);
     }

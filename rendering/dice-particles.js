@@ -5,9 +5,9 @@ export class DiceParticleRenderer {
     this.container = document.getElementById(containerId);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
-      45, 
-      this.container.clientWidth / this.container.clientHeight, 
-      0.1, 
+      45,
+      this.container.clientWidth / this.container.clientHeight,
+      0.1,
       1000
     );
     this.camera.position.set(0, 2, 5);
@@ -20,11 +20,15 @@ export class DiceParticleRenderer {
 
     this.diceParticles = [];
     this.isAnimating = false;
-    
-    this.setupLights();
-    this.animate();
 
-    window.addEventListener('resize', () => this.onResize());
+    // internal handles for proper cleanup
+    this._rafId = null;
+    this._onResizeBound = this.onResize.bind(this);
+
+    this.setupLights();
+    this._startMainLoop();
+
+    window.addEventListener('resize', this._onResizeBound);
   }
 
   setupLights() {
@@ -37,7 +41,14 @@ export class DiceParticleRenderer {
 
   createDieParticles(numDice) {
     // Clear existing
-    this.diceParticles.forEach(p => this.scene.remove(p));
+    this.diceParticles.forEach(p => {
+      this.scene.remove(p);
+      if (p.geometry) p.geometry.dispose();
+      if (p.material) {
+        if (p.material.map) p.material.map.dispose();
+        p.material.dispose();
+      }
+    });
     this.diceParticles = [];
 
     const spacing = 1.5;
@@ -53,7 +64,7 @@ export class DiceParticleRenderer {
         positions[j * 3] = (Math.random() - 0.5) * 0.5;
         positions[j * 3 + 1] = (Math.random() - 0.5) * 0.5;
         positions[j * 3 + 2] = (Math.random() - 0.5) * 0.5;
-        
+
         colors[j * 3] = 0.2 + Math.random() * 0.3;
         colors[j * 3 + 1] = 0.5 + Math.random() * 0.3;
         colors[j * 3 + 2] = 0.8 + Math.random() * 0.2;
@@ -72,7 +83,7 @@ export class DiceParticleRenderer {
 
       const particles = new THREE.Points(geometry, material);
       particles.position.x = startX + i * spacing;
-      particles.userData = { 
+      particles.userData = {
         targetRotation: new THREE.Euler(
           Math.random() * Math.PI * 2,
           Math.random() * Math.PI * 2,
@@ -80,7 +91,7 @@ export class DiceParticleRenderer {
         ),
         rotationSpeed: 0.1
       };
-      
+
       this.scene.add(particles);
       this.diceParticles.push(particles);
     }
@@ -99,7 +110,7 @@ export class DiceParticleRenderer {
         // Spin wildly
         p.rotation.x += p.userData.rotationSpeed * (1 - progress);
         p.rotation.y += p.userData.rotationSpeed * (1 - progress);
-        
+
         // Expand and contract
         const scale = 1 + Math.sin(progress * Math.PI * 4) * 0.3 * (1 - progress);
         p.scale.setScalar(scale);
@@ -117,7 +128,7 @@ export class DiceParticleRenderer {
   }
 
   showResults(results) {
-    // Display result numbers on particles
+    // Display result numbers on particles (kept for possible future use)
     results.forEach((result, i) => {
       if (i < this.diceParticles.length) {
         const particles = this.diceParticles[i];
@@ -127,13 +138,58 @@ export class DiceParticleRenderer {
   }
 
   onResize() {
+    if (!this.container || !this.renderer) return;
     this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
   }
 
-  animate() {
-    requestAnimationFrame(() => this.animate());
-    this.renderer.render(this.scene, this.camera);
+  _startMainLoop() {
+    const loop = () => {
+      this._rafId = requestAnimationFrame(loop);
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    };
+    loop();
+  }
+
+  dispose() {
+    // Stop RAF
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+
+    // Remove resize listener
+    window.removeEventListener('resize', this._onResizeBound);
+
+    // Dispose particles
+    this.diceParticles.forEach(p => {
+      this.scene.remove(p);
+      if (p.geometry) p.geometry.dispose();
+      if (p.material) {
+        if (p.material.map) p.material.map.dispose();
+        p.material.dispose();
+      }
+    });
+    this.diceParticles = [];
+
+    // Dispose renderer and remove DOM element
+    if (this.renderer) {
+      try {
+        this.renderer.forceContextLoss();
+      } catch (e) {}
+      if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+        this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+      }
+      this.renderer.dispose();
+      this.renderer = null;
+    }
+
+    // Clean up scene references
+    this.scene = null;
+    this.camera = null;
+    this.container = null;
   }
 }
