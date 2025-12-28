@@ -65,17 +65,20 @@ export class GameUI {
     }
     
     return `
-      <div class="flex-grow flex flex-col" style="min-height: 260px;">
+      <div class="flex-grow flex flex-col">
         <!-- Ensure the dice canvas container has a measurable height so WebGL can initialize correctly -->
-        <div id="dice-canvas" class="flex-grow" style="flex:1; min-height:220px; min-width:200px;"></div>
-        <div class="p-3 text-center">
+        <div id="dice-canvas" class="flex-grow" style="flex: 1 1 auto; min-width: 200px;"></div>
+        <div class="p-6 text-center bg-gradient-to-t from-slate-900/50 to-transparent">
           ${this.state.rollResults.length > 0 ? `
-            <div class="mb-2">
-              ${this.state.rollResults.map(r => `<span class="text-2xl mx-1">${r.value}</span>`).join(' + ')}
-              = <span class="text-3xl font-bold text-sky-400">${this.state.rollResults.reduce((a,r) => a + r.value, 0)}</span>
+            <div class="mb-4 transform transition-all duration-300 scale-110">
+              ${this.state.rollResults.map(r => `<span class="text-3xl mx-1">${r.value}</span>`).join(' + ')}
+              <div class="mt-1">
+                <span class="text-sm text-slate-400">Total:</span> 
+                <span class="text-4xl font-bold text-sky-400">${this.state.rollResults.reduce((a,r) => a + r.value, 0)}</span>
+              </div>
             </div>
           ` : ''}
-          <button id="btn-throw" class="btn-primary" ${this.state.throwsRemaining === 0 ? 'disabled' : ''}>
+          <button id="btn-throw" class="btn-primary w-full max-w-xs py-4 text-lg" ${this.state.throwsRemaining === 0 ? 'disabled' : ''}>
             🎲 Throw Dice
           </button>
         </div>

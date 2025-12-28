@@ -5,12 +5,12 @@ export class DiceParticleRenderer {
     this.container = document.getElementById(containerId);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
-      45,
+      50,
       this.container.clientWidth / this.container.clientHeight,
       0.1,
       1000
     );
-    this.camera.position.set(0, 2, 5);
+    this.camera.position.set(0, 0, 6);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -51,45 +51,45 @@ export class DiceParticleRenderer {
     });
     this.diceParticles = [];
 
-    const spacing = 1.5;
+    // Calculate dynamic scaling and spacing based on dice count
+    const baseScale = numDice === 1 ? 4.5 : Math.max(1.8, 5 / Math.sqrt(numDice));
+    const spacing = numDice === 1 ? 0 : baseScale * 0.8;
     const startX = -(numDice - 1) * spacing / 2;
 
     for (let i = 0; i < numDice; i++) {
       const geometry = new THREE.BufferGeometry();
-      const numParticles = 200;
+      const numParticles = numDice === 1 ? 800 : 300; // More particles for the large single die
       const positions = new Float32Array(numParticles * 3);
       const colors = new Float32Array(numParticles * 3);
 
       for (let j = 0; j < numParticles; j++) {
-        positions[j * 3] = (Math.random() - 0.5) * 0.5;
-        positions[j * 3 + 1] = (Math.random() - 0.5) * 0.5;
-        positions[j * 3 + 2] = (Math.random() - 0.5) * 0.5;
+        // Uniform distribution in a cube
+        positions[j * 3] = (Math.random() - 0.5);
+        positions[j * 3 + 1] = (Math.random() - 0.5);
+        positions[j * 3 + 2] = (Math.random() - 0.5);
 
-        colors[j * 3] = 0.2 + Math.random() * 0.3;
-        colors[j * 3 + 1] = 0.5 + Math.random() * 0.3;
-        colors[j * 3 + 2] = 0.8 + Math.random() * 0.2;
+        colors[j * 3] = 0.3 + Math.random() * 0.2;
+        colors[j * 3 + 1] = 0.6 + Math.random() * 0.3;
+        colors[j * 3 + 2] = 0.9 + Math.random() * 0.1;
       }
 
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
       const material = new THREE.PointsMaterial({
-        size: 0.03,
+        size: numDice === 1 ? 0.04 : 0.03,
         vertexColors: true,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.7,
         blending: THREE.AdditiveBlending
       });
 
       const particles = new THREE.Points(geometry, material);
+      particles.scale.setScalar(baseScale);
       particles.position.x = startX + i * spacing;
       particles.userData = {
-        targetRotation: new THREE.Euler(
-          Math.random() * Math.PI * 2,
-          Math.random() * Math.PI * 2,
-          Math.random() * Math.PI * 2
-        ),
-        rotationSpeed: 0.1
+        baseScale: baseScale,
+        rotationSpeed: 0.08 + Math.random() * 0.05
       };
 
       this.scene.add(particles);
@@ -107,13 +107,14 @@ export class DiceParticleRenderer {
       const progress = Math.min(elapsed / duration, 1);
 
       this.diceParticles.forEach(p => {
+        const base = p.userData.baseScale;
         // Spin wildly
-        p.rotation.x += p.userData.rotationSpeed * (1 - progress);
-        p.rotation.y += p.userData.rotationSpeed * (1 - progress);
+        p.rotation.x += p.userData.rotationSpeed * (2 - progress);
+        p.rotation.y += p.userData.rotationSpeed * (2 - progress);
 
-        // Expand and contract
-        const scale = 1 + Math.sin(progress * Math.PI * 4) * 0.3 * (1 - progress);
-        p.scale.setScalar(scale);
+        // Expand and contract around the base scale
+        const scaleMod = 1 + Math.sin(progress * Math.PI * 4) * 0.2 * (1 - progress);
+        p.scale.setScalar(base * scaleMod);
       });
 
       if (progress < 1) {
