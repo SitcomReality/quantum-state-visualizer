@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Quantum State Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        canvas { display: block; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); }
+        .matrix-cell { width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; }
+        input[type=range] { accent-color: #38bdf8; }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+        "lucide": "https://esm.sh/lucide@0.344.0"
+      }
+    }
+    </script>
+</head>
+<body>
+    <div id="app" class="relative w-full h-screen overflow-hidden flex flex-col">
+        <!-- Main Canvas Area -->
+        <div id="canvas-container" class="flex-grow relative">
+            <div id="label-overlay" class="absolute inset-0 pointer-events-none"></div>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="glass p-4 rounded-t-2xl shadow-2xl flex flex-col gap-4 max-h-[50%] overflow-y-auto">
+            <!-- Stats Row -->
+            <div class="flex justify-between items-center text-sm font-medium">
+                <div class="flex gap-4">
+                    <div class="flex flex-col">
+                        <span class="text-slate-400 text-[10px] uppercase tracking-wider">Entropy</span>
+                        <span id="stat-entropy" class="text-sky-400">0.000</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-slate-400 text-[10px] uppercase tracking-wider">Purity</span>
+                        <span id="stat-purity" class="text-purple-400">1.000</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-zero" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 transition text-[10px]">|0⟩</button>
+                    <button id="btn-one" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 transition text-[10px]">|1⟩</button>
+                    <button id="btn-plus" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 transition text-[10px]">|+⟩</button>
+                    <button id="btn-mixed" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 transition text-[10px]">Mixed</button>
+                </div>
+            </div>
+
+            <!-- Controls & Matrix Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Vector Controls -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-3">
+                        <span class="w-4 text-xs font-bold text-red-400">X</span>
+                        <input id="slider-rx" type="range" min="-1" max="1" step="0.01" value="0" class="flex-grow">
+                        <span id="val-rx" class="w-10 text-xs text-right">0.00</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="w-4 text-xs font-bold text-green-400">Y</span>
+                        <input id="slider-ry" type="range" min="-1" max="1" step="0.01" value="0" class="flex-grow">
+                        <span id="val-ry" class="w-10 text-xs text-right">0.00</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="w-4 text-xs font-bold text-blue-400">Z</span>
+                        <input id="slider-rz" type="range" min="-1" max="1" step="0.01" value="1" class="flex-grow">
+                        <span id="val-rz" class="w-10 text-xs text-right">1.00</span>
+                    </div>
+                </div>
+
+                <!-- Density Matrix Display -->
+                <div class="flex flex-col items-center justify-center gap-2">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest">Density Matrix (ρ)</div>
+                    <div class="grid grid-cols-2 gap-1 bg-slate-900 p-2 rounded-lg">
+                        <div id="m00" class="matrix-cell bg-slate-800"></div>
+                        <div id="m01" class="matrix-cell bg-slate-800"></div>
+                        <div id="m10" class="matrix-cell bg-slate-800"></div>
+                        <div id="m11" class="matrix-cell bg-slate-800"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Probabilities -->
+            <div class="flex items-center gap-4 text-xs">
+                <div class="flex-grow">
+                    <div class="flex justify-between mb-1">
+                        <span>P(|0⟩)</span>
+                        <span id="val-p0">100%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div id="bar-p0" class="bg-sky-500 h-full" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="flex-grow">
+                    <div class="flex justify-between mb-1">
+                        <span>P(|1⟩)</span>
+                        <span id="val-p1">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                        <div id="bar-p1" class="bg-purple-500 h-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
