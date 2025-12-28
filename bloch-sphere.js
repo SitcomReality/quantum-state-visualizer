@@ -102,7 +102,7 @@ export class BlochSphereRenderer {
       size: 0.03,
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.75,
       blending: THREE.AdditiveBlending,
       sizeAttenuation: true
     });
@@ -172,13 +172,14 @@ export class BlochSphereRenderer {
         const prob = (1 + dot) / 2;
         
         // Map probability to color intensity
-        // We use a non-linear scaling to make the "hotspot" more apparent
-        const intensity = Math.pow(prob, 2.5);
+        // Use a stronger non-linear scaling so low probabilities fall off much faster
+        const intensity = Math.pow(prob, 3.5);
         
-        // Color gradient from dark slate to bright sky blue
-        colors[i * 3] = 0.1 + intensity * 0.3;     // R
-        colors[i * 3 + 1] = 0.2 + intensity * 0.7; // G
-        colors[i * 3 + 2] = 0.3 + intensity * 1.0; // B
+        // Make base colors darker and amplify the intensity contribution
+        // This causes low-probability points to become much less visible (faded)
+        colors[i * 3]     = 0.02 + intensity * 0.25;  // R
+        colors[i * 3 + 1] = 0.05 + intensity * 0.60;  // G
+        colors[i * 3 + 2] = 0.08 + intensity * 1.20;  // B
       }
       this.cloudGeometry.attributes.color.needsUpdate = true;
     }
